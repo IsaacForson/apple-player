@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,13 +7,53 @@ import {
   StyleSheet,
   SafeAreaView,
   StatusBar,
+  FlatList,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { MusicImportService } from "../services/MusicImportService";
+import { AudioService } from "../services/AudioService";
+import { Track } from "../types";
+import { formatDuration } from "../utils/formatters";
+import { useNavigation } from "@react-navigation/native";
 
 const LibraryScreen = () => {
   const [selectedTab, setSelectedTab] = useState("Songs");
+  const [importedTracks, setImportedTracks] = useState<Track[]>([]);
+  const navigation = useNavigation();
 
   const tabs = ["Songs", "Albums", "Artists", "Playlists"];
+  const importService = MusicImportService.getInstance();
+  const audioService = AudioService.getInstance();
+
+  useEffect(() => {
+    loadImportedTracks();
+
+    // Listen for navigation focus to refresh tracks
+    const unsubscribe = navigation.addListener("focus", () => {
+      loadImportedTracks();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
+  const loadImportedTracks = () => {
+    const tracks = importService.getImportedTracks();
+    setImportedTracks(tracks);
+  };
+
+  const handleTrackPress = async (track: Track, index: number) => {
+    try {
+      // Set the queue to all imported tracks and play the selected one
+      audioService.setQueue(importedTracks, index);
+      await audioService.loadTrack(track);
+      await audioService.play();
+
+      // Navigate to player screen
+      (navigation as any).navigate("Player");
+    } catch (error) {
+      console.error("Failed to play track:", error);
+    }
+  };
 
   const TabButton = ({ title, isSelected, onPress }: any) => (
     <TouchableOpacity
@@ -25,6 +65,68 @@ const LibraryScreen = () => {
       </Text>
     </TouchableOpacity>
   );
+
+  const renderTrackItem = ({ item, index }: { item: Track; index: number }) => (
+    <TouchableOpacity
+      style={styles.trackItem}
+      onPress={() => handleTrackPress(item, index)}
+    >
+      <View style={styles.trackArtwork}>
+        <Ionicons name="musical-note" size={24} color="#64748b" />
+      </View>
+      <View style={styles.trackInfo}>
+        <Text style={styles.trackTitle} numberOfLines={1}>
+          {item.title}
+        </Text>
+        <Text style={styles.trackArtist} numberOfLines={1}>
+          {item.artist}
+        </Text>
+      </View>
+      <Text style={styles.trackDuration}>{formatDuration(item.duration)}</Text>
+    </TouchableOpacity>
+  );
+
+  const renderContent = () => {
+    if (selectedTab === "Songs") {
+      if (importedTracks.length === 0) {
+        return (
+          <View style={styles.emptyState}>
+            <Ionicons name="musical-notes-outline" size={64} color="#64748b" />
+            <Text style={styles.emptyStateTitle}>No Songs Yet</Text>
+            <Text style={styles.emptyStateText}>
+              Import music to your library to see it here
+            </Text>
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={() => (navigation as any).navigate("Import")}
+            >
+              <Ionicons name="add" size={24} color="#ffffff" />
+              <Text style={styles.addButtonText}>Import Music</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      }
+
+      return (
+        <FlatList
+          data={importedTracks}
+          renderItem={renderTrackItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.trackList}
+          showsVerticalScrollIndicator={false}
+        />
+      );
+    }
+
+    // For other tabs, show empty state
+    return (
+      <View style={styles.emptyState}>
+        <Ionicons name="musical-notes-outline" size={64} color="#64748b" />
+        <Text style={styles.emptyStateTitle}>No {selectedTab} Yet</Text>
+        <Text style={styles.emptyStateText}>This feature is coming soon</Text>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -52,19 +154,7 @@ const LibraryScreen = () => {
         ))}
       </ScrollView>
 
-      <ScrollView style={styles.content}>
-        <View style={styles.emptyState}>
-          <Ionicons name="musical-notes-outline" size={64} color="#64748b" />
-          <Text style={styles.emptyStateTitle}>No {selectedTab} Yet</Text>
-          <Text style={styles.emptyStateText}>
-            Add music to your library to see it here
-          </Text>
-          <TouchableOpacity style={styles.addButton}>
-            <Ionicons name="add" size={24} color="#ffffff" />
-            <Text style={styles.addButtonText}>Add Music</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+      <View style={styles.content}>{renderContent()}</View>
     </SafeAreaView>
   );
 };
@@ -148,6 +238,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     marginLeft: 8,
+  },
+  trackList: {
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  trackItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  trackArtwork: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  trackInfo: {
+    flex: 1,
+  },
+  trackTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 4,
+  },
+  trackArtist: {
+    fontSize: 14,
+    color: "#64748b",
+  },
+  trackDuration: {
+    fontSize: 14,
+    color: "#64748b",
+    fontWeight: "500",
   },
 });
 

@@ -11,6 +11,7 @@ import LibraryScreen from "../screens/LibraryScreen";
 import SearchScreen from "../screens/SearchScreen";
 import PlayerScreen from "../screens/PlayerScreen";
 import SettingsScreen from "../screens/SettingsScreen";
+import { ImportScreen } from "../screens/ImportScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -28,6 +29,8 @@ const TabNavigator = () => {
             iconName = focused ? "library" : "library-outline";
           } else if (route.name === "Search") {
             iconName = focused ? "search" : "search-outline";
+          } else if (route.name === "Import") {
+            iconName = focused ? "download" : "download-outline";
           } else if (route.name === "Settings") {
             iconName = focused ? "settings" : "settings-outline";
           } else {
@@ -56,6 +59,7 @@ const TabNavigator = () => {
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Library" component={LibraryScreen} />
       <Tab.Screen name="Search" component={SearchScreen} />
+      <Tab.Screen name="Import" component={ImportScreen} />
       <Tab.Screen name="Settings" component={SettingsScreen} />
     </Tab.Navigator>
   );

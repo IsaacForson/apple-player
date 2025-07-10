@@ -1,4 +1,4 @@
-import { Audio, AVPlaybackStatus, AVPlaybackStatusSuccess } from "expo-av";
+import { Audio } from "expo-av";
 import { Track, PlayerState, RepeatMode } from "../types";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -43,10 +43,8 @@ export class AudioService {
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         staysActiveInBackground: true,
-        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: true,
-        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
         playThroughEarpieceAndroid: false,
       });
     } catch (error) {
@@ -270,11 +268,13 @@ export class AudioService {
         }
       }
 
-      await this.sound.playAsync();
-      this.isPlaying = true;
-      this.isPaused = false;
-      this.startPositionUpdates();
-      this.notifyListeners();
+      if (this.sound) {
+        await this.sound.playAsync();
+        this.isPlaying = true;
+        this.isPaused = false;
+        this.startPositionUpdates();
+        this.notifyListeners();
+      }
     } catch (error) {
       console.error("Failed to play:", error);
       throw error;
