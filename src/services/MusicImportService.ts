@@ -71,11 +71,15 @@ export class MusicImportService {
         tracks.push(track);
       }
 
+      // Filter out duplicates based on ID
+      const existingIds = new Set(this.importedTracks.map((track) => track.id));
+      const newTracks = tracks.filter((track) => !existingIds.has(track.id));
+
       // Merge with existing imported tracks
-      this.importedTracks = [...this.importedTracks, ...tracks];
+      this.importedTracks = [...this.importedTracks, ...newTracks];
       await this.saveImportedTracks();
 
-      return tracks;
+      return newTracks;
     } catch (error) {
       console.error("Failed to import from media library:", error);
       throw error;
@@ -100,24 +104,42 @@ export class MusicImportService {
       for (const file of result.assets) {
         // Copy file to app's document directory for permanent access
         const filename = file.name;
-        const destinationUri = `${FileSystem.documentDirectory}music/${filename}`;
+        const musicDir = `${FileSystem.documentDirectory}music/`;
 
         // Ensure music directory exists
-        await FileSystem.makeDirectoryAsync(
-          `${FileSystem.documentDirectory}music/`,
-          {
-            intermediates: true,
-          }
-        );
-
-        // Copy file
-        await FileSystem.copyAsync({
-          from: file.uri,
-          to: destinationUri,
+        await FileSystem.makeDirectoryAsync(musicDir, {
+          intermediates: true,
         });
+
+        // Generate unique filename if file already exists
+        let destinationUri = `${musicDir}${filename}`;
+        let counter = 1;
+        while (await this.fileExists(destinationUri)) {
+          const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
+          const extension = filename.split(".").pop() || "";
+          destinationUri = `${musicDir}${nameWithoutExt}_${counter}.${extension}`;
+          counter++;
+        }
+
+        // Copy file with error handling
+        try {
+          await FileSystem.copyAsync({
+            from: file.uri,
+            to: destinationUri,
+          });
+        } catch (error) {
+          console.error(`Failed to copy file ${filename}:`, error);
+          continue; // Skip this file and continue with others
+        }
 
         // Get file info
         const fileInfo = await FileSystem.getInfoAsync(destinationUri);
+
+        // Skip if file doesn't exist after copy
+        if (!fileInfo.exists) {
+          console.error(`File ${filename} was not copied successfully`);
+          continue;
+        }
 
         const track: Track = {
           id: `imported_${Date.now()}_${Math.random()}`,
@@ -136,6 +158,7 @@ export class MusicImportService {
         tracks.push(track);
       }
 
+      // No need to filter duplicates for file imports since they get unique IDs
       // Merge with existing imported tracks
       this.importedTracks = [...this.importedTracks, ...tracks];
       await this.saveImportedTracks();
@@ -248,6 +271,16 @@ export class MusicImportService {
     } catch (error) {
       console.error("Failed to get storage usage:", error);
       return { used: 0, total: 0 };
+    }
+  }
+
+  // Check if file exists
+  private async fileExists(uri: string): Promise<boolean> {
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(uri);
+      return fileInfo.exists;
+    } catch (error) {
+      return false;
     }
   }
 
