@@ -83,7 +83,24 @@ export const ImportScreen: React.FC = () => {
       setIsImporting(true);
       setImportProgress("Opening file picker...");
 
+      // Add progress tracking
+      const originalConsoleLog = console.log;
+      console.log = (...args) => {
+        const message = args.join(" ");
+        if (message.includes("Processing file")) {
+          setImportProgress(message);
+        } else if (message.includes("Copying file")) {
+          setImportProgress(`Copying: ${message.split(": ")[1]}`);
+        } else if (message.includes("Successfully imported")) {
+          setImportProgress(`Imported: ${message.split(": ")[1]}`);
+        }
+        originalConsoleLog(...args);
+      };
+
       const tracks = await importService.importFromFiles();
+
+      // Restore console.log
+      console.log = originalConsoleLog;
 
       if (tracks.length === 0) {
         Alert.alert(

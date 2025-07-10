@@ -100,62 +100,76 @@ export class MusicImportService {
       }
 
       const tracks: Track[] = [];
+      const musicDir = `${FileSystem.documentDirectory}music/`;
 
-      for (const file of result.assets) {
-        // Copy file to app's document directory for permanent access
-        const filename = file.name;
-        const musicDir = `${FileSystem.documentDirectory}music/`;
+      // Ensure music directory exists once
+      await FileSystem.makeDirectoryAsync(musicDir, {
+        intermediates: true,
+      });
 
-        // Ensure music directory exists
-        await FileSystem.makeDirectoryAsync(musicDir, {
-          intermediates: true,
-        });
+      // Process files with better error handling and progress tracking
+      for (let i = 0; i < result.assets.length; i++) {
+        const file = result.assets[i];
+        console.log(
+          `Processing file ${i + 1}/${result.assets.length}: ${file.name}`
+        );
 
-        // Generate unique filename if file already exists
-        let destinationUri = `${musicDir}${filename}`;
-        let counter = 1;
-        while (await this.fileExists(destinationUri)) {
-          const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
-          const extension = filename.split(".").pop() || "";
-          destinationUri = `${musicDir}${nameWithoutExt}_${counter}.${extension}`;
-          counter++;
-        }
-
-        // Copy file with error handling
         try {
-          await FileSystem.copyAsync({
-            from: file.uri,
-            to: destinationUri,
-          });
+          const filename = file.name;
+
+          // Generate unique filename if file already exists
+          let destinationUri = `${musicDir}${filename}`;
+          let counter = 1;
+          while (await this.fileExists(destinationUri)) {
+            const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
+            const extension = filename.split(".").pop() || "";
+            destinationUri = `${musicDir}${nameWithoutExt}_${counter}.${extension}`;
+            counter++;
+          }
+
+          // Copy file with timeout and better error handling
+          console.log(`Copying file: ${filename}`);
+          await Promise.race([
+            FileSystem.copyAsync({
+              from: file.uri,
+              to: destinationUri,
+            }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Copy timeout")), 30000)
+            ),
+          ]);
+
+          // Verify file was copied
+          const fileInfo = await FileSystem.getInfoAsync(destinationUri);
+          if (!fileInfo.exists) {
+            console.error(`File ${filename} was not copied successfully`);
+            continue;
+          }
+
+          // Extract metadata from filename
+          const metadata = await this.extractMetadata(filename);
+
+          const track: Track = {
+            id: `imported_${Date.now()}_${Math.random()}_${i}`,
+            title: metadata.title || filename.replace(/\.[^/.]+$/, ""),
+            artist: metadata.artist || "Unknown Artist",
+            album: "Unknown Album",
+            duration: 0, // Will be updated when loaded
+            uri: destinationUri,
+            artwork: undefined,
+            genre: undefined,
+            dateAdded: new Date(),
+            fileSize: (fileInfo as any).size || undefined,
+            isLiked: false,
+          };
+
+          tracks.push(track);
+          console.log(`Successfully imported: ${filename}`);
         } catch (error) {
-          console.error(`Failed to copy file ${filename}:`, error);
-          continue; // Skip this file and continue with others
-        }
-
-        // Get file info
-        const fileInfo = await FileSystem.getInfoAsync(destinationUri);
-
-        // Skip if file doesn't exist after copy
-        if (!fileInfo.exists) {
-          console.error(`File ${filename} was not copied successfully`);
+          console.error(`Failed to import file ${file.name}:`, error);
+          // Continue with next file instead of stopping
           continue;
         }
-
-        const track: Track = {
-          id: `imported_${Date.now()}_${Math.random()}`,
-          title: filename.replace(/\.[^/.]+$/, ""), // Remove file extension
-          artist: "Unknown Artist",
-          album: "Unknown Album",
-          duration: 0, // Will be updated when loaded
-          uri: destinationUri,
-          artwork: undefined,
-          genre: undefined,
-          dateAdded: new Date(),
-          fileSize: (fileInfo as any).size || undefined,
-          isLiked: false,
-        };
-
-        tracks.push(track);
       }
 
       // No need to filter duplicates for file imports since they get unique IDs
